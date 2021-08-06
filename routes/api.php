@@ -23,7 +23,7 @@ Route::post("/register", 'UserController@register');
 
 Route::group(['middleware'=>'apiAuth'], function(){
     Route::get("/balance", 'WalletController@balance');
-    Route::get("/transactions", 'WalletController@transactions');
+    Route::get("/transactions", 'TransactionController@transactions');
     Route::post("/wallet/add", 'WalletController@add');
     Route::post("/wallet/send", 'WalletController@send');
 });

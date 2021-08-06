@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Helpers\ResponseHelper;
+use Exception;
+use App\Models\User;
 use App\Models\Wallet;
 use App\Models\Transaction;
-use App\Models\User;
-use Exception;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Http\Request;
+use App\Helpers\ResponseHelper;
+use Illuminate\Support\Facades\DB;
+use App\Services\TransactionService;
 
 class WalletController extends Controller
 {
@@ -21,23 +22,11 @@ class WalletController extends Controller
         return ResponseHelper::success($wallet);
     }
 
-    public function transactions(Request $request)
-    {
-        $user = $request->user;
-        $transactions = Transaction::
-            with("wallet")
-            ->where('user_id', $user->id)
-            ->orderBy('id', 'desc')
-            ->get();
-        return ResponseHelper::success($transactions);
-    }
-
     public function add(Request $request)
     {
         try {
-
             DB::beginTransaction();
-            $transaction = $this->creditAmountToWallet(
+            $transaction = TransactionService::creditAmountToWallet(
                 User::find($request->user->id),
                 Wallet::where('user_id', $request->user->id)->first(),
                 $request->input('amount'));
@@ -68,7 +57,7 @@ class WalletController extends Controller
             if(!$destinationWallet){
                 throw new Exception("Destination wallet doesn't not exist");
             }
-            $transaction = $this->sendMoneyToAnotherWallet(
+            $transaction = TransactionService::sendMoneyToAnotherWallet(
                 $sourceWallet,
                 $destinationWallet,
                 $request->input('amount')
@@ -77,58 +66,10 @@ class WalletController extends Controller
             return ResponseHelper::success($transaction);
         } catch (Exception $e) {
             DB::rollBack();
-            return ResponseHelper::error(null, $e->getMessage());
+            return response(ResponseHelper::error(null, $e->getMessage()), 400);
         }
     }
 
-    public function creditAmountToWallet(User $user, Wallet $wallet, int $amount){
-        $transaction = Transaction::create([
-            'user_id' => $user['id'],
-            'wallet_id' => $wallet['id'],
-            'transaction_id' => strtoupper(Str::random()),
-            'type' => 'CREDIT',
-            'amount' => $amount,
-            'currency' => "NGN",
-        ]);
-        $wallet->balance += $amount;
-        $wallet->save();
-        return $transaction;
-    }
 
-    public function debitAmountToWallet(User $user, Wallet $wallet, int $amount){
-        $transaction = Transaction::create([
-            'user_id' => $user['id'],
-            'wallet_id' => $wallet['id'],
-            'transaction_id' => strtoupper(Str::random()),
-            'type' => 'DEBIT',
-            'amount' => $amount,
-            'currency' => "NGN",
-        ]);
-        $wallet->balance -= $amount;
-        $wallet->save();
-        return $transaction;
-    }
-
-    public function sendMoneyToAnotherWallet(Wallet $sourceWallet, Wallet $destinationWallet, int $amount){
-        if($sourceWallet->balance > $amount){
-            $sourceWallet->balance -= $amount;
-            $sourceWallet->save();
-
-            $destinationWallet->balance += $amount;
-            $destinationWallet->save();
-
-            $transaction = $this->creditAmountToWallet(
-                User::find($destinationWallet->user_id),
-                $destinationWallet,
-                $amount
-            );
-            $debitTransaction = $this->debitAmountToWallet(
-                User::find($sourceWallet->user_id),
-                $sourceWallet,
-                $amount
-            );
-            return $debitTransaction;
-        }
-    }
 
 }
